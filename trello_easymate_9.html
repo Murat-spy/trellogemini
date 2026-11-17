@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trello: Внедрение EasyMate (Химия, 9 класс)</title>
+    <!-- Подключение Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Подключение шрифта Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Иконки Lucide -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0c2461 0%, #1e3799 45%, #4a69bd 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Кастомный скроллбар в стиле Trello */
+        .board-scroll::-webkit-scrollbar {
+            height: 12px;
+        }
+        .board-scroll::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.18);
+            border-radius: 6px;
+            margin: 0 12px;
+        }
+        .board-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.35);
+            border-radius: 6px;
+        }
+        .board-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .column-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .column-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .column-scroll::-webkit-scrollbar-thumb {
+            background: rgba(9, 30, 66, 0.18);
+            border-radius: 3px;
+        }
+        .column-scroll::-webkit-scrollbar-thumb:hover {
+            background: rgba(9, 30, 66, 0.3);
+        }
+
+        /* Эффекты при перетаскивании карточки */
+        .task-card {
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+        }
+        .task-card:hover {
+            background-color: #f8fafc;
+            box-shadow: 0 4px 10px rgba(9, 30, 66, 0.15);
+        }
+        .task-card.dragging {
+            opacity: 0.55;
+            transform: rotate(2deg) scale(1.02);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+        }
+        .column-dropzone.drag-over {
+            background-color: rgba(255, 255, 255, 0.85);
+            outline: 2px dashed #3b82f6;
+            outline-offset: -4px;
+        }
+
+        /* Плавное появление модальных окон */
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .modal-animate {
+            animation: modalFadeIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen text-slate-800 select-none">
+
+    <!-- ВЕРХНЯЯ ПАНЕЛЬ НАВИГАЦИИ (TRELLO HEADER) -->
+    <header class="bg-black/25 backdrop-blur-md border-b border-white/15 px-4 py-2.5 text-white shrink-0">
+        <div class="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            
+            <!-- Логотип и название проекта -->
+            <div class="flex items-center gap-3">
+                <div class="bg-white/20 p-2 rounded-lg flex items-center justify-center shadow-inner">
+                    <i data-lucide="flask-conical" class="w-5 h-5 text-cyan-300"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h1 class="font-bold text-base sm:text-lg tracking-tight leading-tight">
+                            Внедрение EasyMate (Химия, 9 класс)
+                        </h1>
+                        <span class="text-xs font-medium bg-white/15 px-2.5 py-0.5 rounded-full text-blue-100 border border-white/10">
+                            16 окт – 12 дек • 7 недель
+                        </span>
+                    </div>
+                    <!-- Прогресс-бар проекта -->
+                    <div class="flex items-center gap-2.5 mt-1">
+                        <div class="w-32 sm:w-44 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                            <div id="global-progress-bar" class="h-full bg-emerald-400 transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <span id="global-progress-text" class="text-[11px] text-blue-100 font-medium">
+                            Выполнено: 0 из 21 (0%)
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Панель фильтров и управления -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Поиск -->
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 text-white/70 absolute left-2.5 top-1/2 -translate-y-1/2"></i>
+                    <input 
+                        type="text" 
+                        id="search-input" 
+                        placeholder="Поиск задач..." 
+                        class="bg-white/15 hover:bg-white/20 focus:bg-white focus:text-slate-900 placeholder-white/70 focus:placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-8 pr-3 py-1.5 w-36 sm:w-48 outline-none transition border border-white/15 focus:border-white"
+                    >
+                </div>
+
+                <!-- Фильтр по участникам -->
+                <select 
+                    id="filter-role" 
+                    class="bg-white/15 hover:bg-white/25 text-white text-xs sm:text-sm rounded-lg px-2.5 py-1.5 outline-none border border-white/15 cursor-pointer transition [&>option]:text-slate-800"
+                >
+                    <option value="all">👥 Все участники (3)</option>
+                    <option value="role1">🟢 Участник 1: Методист-химик</option>
+                    <option value="role2">🔵 Участник 2: Тех. координатор</option>
+                    <option value="role3">🟠 Участник 3: Аналитик / Орг.</option>
+                </select>
+
+                <!-- Фильтр по неделям -->
+                <select 
+                    id="filter-week" 
+                    class="bg-white/15 hover:bg-white/25 text-white text-xs sm:text-sm rounded-lg px-2.5 py-1.5 outline-none border border-white/15 cursor-pointer transition [&>option]:text-slate-800"
+                >
+                    <option value="all">📅 Все недели (1–7)</option>
+                    <option value="1">Неделя 1 (16–22 окт)</option>
+                    <option value="2">Неделя 2 (23–29 окт)</option>
+                    <option value="3">Неделя 3 (30 окт–5 ноя)</option>
+                    <option value="4">Неделя 4 (6–12 ноя)</option>
+                    <option value="5">Неделя 5 (13–19 ноя)</option>
+                    <option value="6">Неделя 6 (20–26 ноя)</option>
+                    <option value="7">Неделя 7 (27 ноя–12 дек)</option>
+                </select>
+
+                <!-- Кнопка Справка / Роли -->
+                <button 
+                    onclick="openHelpModal()" 
+                    class="bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-white/15 transition cursor-pointer"
+                    title="Роли участников и правила работы с доской"
+                >
+                    <i data-lucide="info" class="w-4 h-4 text-amber-300"></i>
+                    <span class="hidden md:inline">Справка и роли</span>
+                </button>
+
+                <!-- Кнопка Сброс доски -->
+                <button 
+                    onclick="openResetModal()" 
+                    class="bg-rose-500/80 hover:bg-rose-600 active:scale-95 text-white text-xs sm:text-sm font-medium px-3 py-1.5 rounded-lg flex items-center gap-1.5 border border-rose-400/30 transition cursor-pointer"
+                    title="Вернуть все карточки к исходному плану"
+                >
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    <span class="hidden lg:inline">Сбросить план</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ЛЕГЕНДА МЕТОК (БЫСТРЫЙ ФИЛЬТР) -->
+    <div class="bg-black/15 px-4 py-1.5 border-b border-white/10 text-white/90 text-xs shrink-0 overflow-x-auto">
+        <div class="max-w-[1920px] mx-auto flex items-center justify-between gap-4 min-w-max">
+            <div class="flex items-center gap-3">
+                <span class="text-white/60 font-medium">Метки участников:</span>
+                <button onclick="quickFilterRole('role1')" class="flex items-center gap-1.5 bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 px-2.5 py-0.5 rounded-full transition cursor-pointer">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span>Участник 1: Методист-химик</span>
+                </button>
+                <button onclick="quickFilterRole('role2')" class="flex items-center gap-1.5 bg-sky-500/20 hover:bg-sky-500/35 border border-sky-400/40 px-2.5 py-0.5 rounded-full transition cursor-pointer">
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                    <span>Участник 2: Тех. координатор</span>
+                </button>
+                <button onclick="quickFilterRole('role3')" class="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/40 px-2.5 py-0.5 rounded-full transition cursor-pointer">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                    <span>Участник 3: Аналитик / Организатор</span>
+                </button>
+            </div>
+            <div class="text-white/70 hidden sm:flex items-center gap-1.5">
+                <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i>
+                <span>Перетаскивайте карточки между колонками или нажмите на карточку для открытия чек-листа</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОСНОВНОЕ ПОЛЕ КАНБАН-ДОСКИ (5 КОЛОНОК) -->
+    <main id="board-container" class="flex-1 overflow-x-auto overflow-y-hidden board-scroll p-4 flex items-start gap-4">
+        <!-- Колонки рендерятся динамически через JS -->
+    </main>
+
+    <!-- МОДАЛЬНОЕ ОКНО ПРОСМОТРА И РЕДАКТИРОВАНИЯ КАРТОЧКИ -->
+    <div id="card-modal" class="fixed inset-0 bg-slate-900/65 backdrop-blur-xs hidden items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+        <div class="bg-[#f4f5f7] text-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 modal-animate overflow-hidden my-auto">
+            
+            <!-- Цветная шапка карточки -->
+            <div id="modal-banner" class="h-3 w-full bg-emerald-500 transition-colors"></div>
+
+            <div class="p-5 sm:p-6 max-h-[88vh] overflow-y-auto column-scroll">
+                <!-- Заголовок и кнопка закрытия -->
+                <div class="flex items-start justify-between gap-3 mb-4">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                            <span id="modal-week-badge" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-indigo-100 text-indigo-800">
+                                Неделя 1 • Подготовка
+                            </span>
+                            <span class="text-xs text-slate-500">в колонке</span>
+                            <select id="modal-column-select" class="text-xs font-semibold bg-white border border-slate-300 rounded-md px-2 py-0.5 text-slate-700 outline-none focus:border-blue-500 cursor-pointer">
+                                <option value="backlog">Бэклог (Все задачи)</option>
+                                <option value="todo">План на текущую неделю (To Do)</option>
+                                <option value="inprogress">В работе (In Progress)</option>
+                                <option value="review">На проверке (Review)</option>
+                                <option value="done">Готово (Done)</option>
+                            </select>
+                        </div>
+                        <input 
+                            type="text" 
+                            id="modal-title-input" 
+                            class="w-full text-lg sm:text-xl font-bold text-slate-900 bg-transparent hover:bg-white/70 focus:bg-white rounded-lg px-2 py-1 -ml-2 outline-none border border-transparent focus:border-blue-400 transition"
+                        >
+                    </div>
+                    <button onclick="closeCardModal()" class="p-2 rounded-xl hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 transition cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Блок свойств: Ответственный (метка) и Срок (Due Date) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div>
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            Ответственный (Метка)
+                        </label>
+                        <select id="modal-role-select" class="w-full text-sm font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500 cursor-pointer">
+                            <option value="role1">🟢 Участник 1: Методист-химик</option>
+                            <option value="role2">🔵 Участник 2: Тех. координатор</option>
+                            <option value="role3">🟠 Участник 3: Аналитик / Организатор</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            Срок выполнения (Дедлайн)
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <input 
+                                type="text" 
+                                id="modal-due-input" 
+                                placeholder="Например: 22 окт"
+                                class="flex-1 text-sm font-medium bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500"
+                            >
+                            <label class="flex items-center gap-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 px-2.5 py-2 rounded-lg cursor-pointer select-none">
+                                <input type="checkbox" id="modal-due-done" class="rounded text-emerald-600 focus:ring-0 w-4 h-4">
+                                <span>Сдано</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Описание задачи -->
+                <div class="mb-5">
+                    <div class="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                        <i data-lucide="align-left" class="w-4 h-4 text-slate-500"></i>
+                        <span>Описание задачи</span>
+                    </div>
+                    <textarea 
+                        id="modal-desc-input" 
+                        rows="3" 
+                        placeholder="Добавьте подробное описание, ссылки на материалы EasyMate или критерии выполнения..."
+                        class="w-full text-sm text-slate-700 bg-white border border-slate-200 rounded-xl p-3 outline-none focus:border-blue-500 transition resize-y"
+                    ></textarea>
+                </div>
+
+                <!-- Чек-лист подзадач -->
+                <div class="mb-5 bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2 text-sm font-bold text-slate-700">
+                            <i data-lucide="check-square" class="w-4 h-4 text-blue-600"></i>
+                            <span>Чек-лист выполнения</span>
+                        </div>
+                        <span id="modal-checklist-percent" class="text-xs font-bold text-slate-500">0%</span>
+                    </div>
+
+                    <!-- Прогресс-бар чек-листа -->
+                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3">
+                        <div id="modal-checklist-bar" class="h-full bg-blue-600 transition-all duration-300" style="width: 0%"></div>
+                    </div>
+
+                    <!-- Список пунктов -->
+                    <div id="modal-checklist-items" class="space-y-2 mb-3"></div>
+
+                    <!-- Добавление нового пункта чек-листа -->
+                    <div class="flex items-center gap-2 pt-1">
+                        <input 
+                            type="text" 
+                            id="new-checklist-item-input" 
+                            placeholder="Добавить подзадачу в чек-лист..." 
+                            class="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-500"
+                            onkeydown="if(event.key === 'Enter') addChecklistItem()"
+                        >
+                        <button 
+                            onclick="addChecklistItem()" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-2 rounded-lg transition cursor-pointer"
+                        >
+                            Добавить
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Комментарии / Активность -->
+                <div class="mb-5">
+                    <div class="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
+                        <i data-lucide="message-square" class="w-4 h-4 text-slate-500"></i>
+                        <span>Комментарии команды</span>
+                    </div>
+                    <div class="flex gap-2 mb-3">
+                        <input 
+                            type="text" 
+                            id="new-comment-input" 
+                            placeholder="Напишите комментарий или заметку по прогрессу..." 
+                            class="flex-1 text-sm bg-white border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-blue-500"
+                            onkeydown="if(event.key === 'Enter') addComment()"
+                        >
+                        <button 
+                            onclick="addComment()" 
+                            class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-3.5 py-2 rounded-xl transition cursor-pointer"
+                        >
+                            Отправить
+                        </button>
+                    </div>
+                    <div id="modal-comments-list" class="space-y-2 max-h-40 overflow-y-auto column-scroll"></div>
+                </div>
+
+                <!-- Нижняя панель действий модального окна -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-200">
+                    <button 
+                        onclick="deleteCurrentCard()" 
+                        class="text-xs font-semibold text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-lg flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        <span>Удалить карточку</span>
+                    </button>
+
+                    <div class="flex items-center gap-2">
+                        <button 
+                            onclick="closeCardModal()" 
+                            class="text-xs font-semibold text-slate-600 hover:bg-slate-200 px-4 py-2 rounded-lg transition cursor-pointer"
+                        >
+                            Отмена
+                        </button>
+                        <button 
+                            onclick="saveCardChanges()" 
+                            class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-5 py-2 rounded-lg shadow-sm transition cursor-pointer"
+                        >
+                            Сохранить изменения
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ДОБАВЛЕНИЯ НОВОЙ КАРТОЧКИ -->
+    <div id="add-card-modal" class="fixed inset-0 bg-slate-900/65 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+        <div class="bg-white text-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-5 sm:p-6 modal-animate">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-lg text-slate-900">Новая карточка задачи</h3>
+                <button onclick="closeAddCardModal()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-3.5">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Название задачи *</label>
+                    <input type="text" id="new-card-title" placeholder="Например: Подготовить тест по ионным реакциям" class="w-full text-sm border border-slate-300 rounded-xl px-3 py-2 outline-none focus:border-blue-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Колонка</label>
+                        <select id="new-card-column" class="w-full text-sm border border-slate-300 rounded-xl px-2.5 py-2 outline-none focus:border-blue-500 bg-white">
+                            <option value="backlog">Бэклог</option>
+                            <option value="todo">План на неделю</option>
+                            <option value="inprogress">В работе</option>
+                            <option value="review">На проверке</option>
+                            <option value="done">Готово</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Неделя проекта</label>
+                        <select id="new-card-week" class="w-full text-sm border border-slate-300 rounded-xl px-2.5 py-2 outline-none focus:border-blue-500 bg-white">
+                            <option value="1">Неделя 1 (16–22 окт)</option>
+                            <option value="2">Неделя 2 (23–29 окт)</option>
+                            <option value="3">Неделя 3 (30 окт–5 ноя)</option>
+                            <option value="4">Неделя 4 (6–12 ноя)</option>
+                            <option value="5">Неделя 5 (13–19 ноя)</option>
+                            <option value="6">Неделя 6 (20–26 ноя)</option>
+                            <option value="7">Неделя 7 (27 ноя–12 дек)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Ответственный</label>
+                        <select id="new-card-role" class="w-full text-sm border border-slate-300 rounded-xl px-2.5 py-2 outline-none focus:border-blue-500 bg-white">
+                            <option value="role1">🟢 Методист-химик</option>
+                            <option value="role2">🔵 Тех. координатор</option>
+                            <option value="role3">🟠 Аналитик / Орг.</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Дедлайн</label>
+                        <input type="text" id="new-card-due" value="22 окт" class="w-full text-sm border border-slate-300 rounded-xl px-3 py-2 outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Описание</label>
+                    <textarea id="new-card-desc" rows="2" placeholder="Краткое описание задачи..." class="w-full text-sm border border-slate-300 rounded-xl px-3 py-2 outline-none focus:border-blue-500"></textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 mt-5 pt-3 border-t border-slate-100">
+                <button onclick="closeAddCardModal()" class="text-xs font-semibold text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-xl cursor-pointer">Отмена</button>
+                <button onclick="createNewCard()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded-xl cursor-pointer">Создать карточку</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО «СПРАВКА И РОЛИ» -->
+    <div id="help-modal" class="fixed inset-0 bg-slate-900/65 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+        <div class="bg-white text-slate-800 rounded-2xl w-full max-w-2xl shadow-2xl p-5 sm:p-6 modal-animate max-h-[88vh] overflow-y-auto column-scroll">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="bg-blue-100 text-blue-700 p-2 rounded-xl">
+                        <i data-lucide="book-open" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-lg text-slate-900">Структура проекта и распределение ролей</h3>
+                        <p class="text-xs text-slate-500">План на 7 недель: с 16 октября по 12 декабря</p>
+                    </div>
+                </div>
+                <button onclick="closeHelpModal()" class="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <!-- Роли -->
+                <div>
+                    <h4 class="font-bold text-slate-800 mb-2">Распределение ролей (Метки на доске)</h4>
+                    <div class="space-y-2.5">
+                        <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                            <div class="font-bold text-emerald-900 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                                Участник 1: Методист-химик
+                            </div>
+                            <p class="text-xs text-emerald-800 mt-1">Разработка учебного контента, выбор тем 9 класса (ГОСО РК), составление заданий и проверка корректности решений в EasyMate.</p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-sky-50 border border-sky-200">
+                            <div class="font-bold text-sky-900 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-sky-500"></span>
+                                Участник 2: Технический координатор
+                            </div>
+                            <p class="text-xs text-sky-800 mt-1">Настройка платформы EasyMate (модули Creation / Solver), регистрация учеников, техническая поддержка на уроках, сбор логов и статистики.</p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                            <div class="font-bold text-amber-900 flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                                Участник 3: Аналитик и организатор
+                            </div>
+                            <p class="text-xs text-amber-800 mt-1">Проведение входного/итогового срезов знаний, анкетирование учеников и учителей, анализ успеваемости, оформление итогового отчета и презентации.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Правила колонок -->
+                <div>
+                    <h4 class="font-bold text-slate-800 mb-2">Правила движения карточек по колонкам</h4>
+                    <ul class="space-y-1.5 text-xs text-slate-600 list-disc pl-5">
+                        <li><strong>Бэклог (Все задачи проекта):</strong> полный план на 7 недель (21 задача). В начале каждой недели команда переносит задачи текущей недели в колонку «План на текущую неделю».</li>
+                        <li><strong>План на текущую неделю (To Do):</strong> задачи, которые должны быть закрыты до воскресенья текущей недели.</li>
+                        <li><strong>В работе (In Progress):</strong> активные задачи. Действует <strong>WIP-лимит: максимум 6 карточек</strong> (не более 2 задач одновременно на каждого участника), чтобы не распылять фокус.</li>
+                        <li><strong>На проверке / Согласовании (Review):</strong> готовые тесты, памятки и отчеты, которые проверяют коллеги или руководитель.</li>
+                        <li><strong>Готово (Done):</strong> выполненные и утвержденные задачи недели.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="mt-5 pt-3 border-t border-slate-100 flex justify-end">
+                <button onclick="closeHelpModal()" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold px-5 py-2 rounded-xl cursor-pointer">
+                    Понятно
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ПОДТВЕРЖДЕНИЯ СБРОСА -->
+    <div id="reset-modal" class="fixed inset-0 bg-slate-900/65 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+        <div class="bg-white text-slate-800 rounded-2xl w-full max-w-sm shadow-2xl p-5 modal-animate">
+            <div class="flex items-center gap-3 text-rose-600 mb-3">
+                <div class="bg-rose-100 p-2 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+                <h3 class="font-bold text-base text-slate-900">Сбросить доску к исходному плану?</h3>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed mb-4">
+                Все перемещения карточек, отметки в чек-листах и добавленные комментарии будут удалены. Доска вернется к стартовому плану на 7 недель (21 задача в Бэклоге).
+            </p>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeResetModal()" class="text-xs font-semibold text-slate-600 hover:bg-slate-100 px-3.5 py-2 rounded-xl cursor-pointer">Отмена</button>
+                <button onclick="confirmResetBoard()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-4 py-2 rounded-xl cursor-pointer">Да, сбросить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ВСПЛЫВАЮЩЕЕ УВЕДОМЛЕНИЕ (TOAST) -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-xl border border-white/10 transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-2">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-message">Изменения сохранены</span>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. КОНФИГУРАЦИЯ КОЛОНОК, РОЛЕЙ И НЕДЕЛЬ
+        // ==========================================
+        const COLUMNS = [
+            { id: 'backlog', title: 'Бэклог (Все задачи проекта)', wipLimit: null, badgeColor: 'bg-slate-200 text-slate-700' },
+            { id: 'todo', title: 'План на текущую неделю (To Do)', wipLimit: null, badgeColor: 'bg-blue-100 text-blue-800' },
+            { id: 'inprogress', title: 'В работе (In Progress)', wipLimit: 6, badgeColor: 'bg-amber-100 text-amber-800' },
+            { id: 'review', title: 'На проверке (Review)', wipLimit: null, badgeColor: 'bg-purple-100 text-purple-800' },
+            { id: 'done', title: 'Готово (Done)', wipLimit: null, badgeColor: 'bg-emerald-100 text-emerald-800' }
+        ];
+
+        const ROLES = {
+            role1: {
+                id: 'role1',
+                shortName: 'Участник 1: Методист-химик',
+                badgeBg: 'bg-emerald-500',
+                pillBg: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+                bannerBg: 'bg-emerald-500',
+                avatar: 'МХ'
+            },
+            role2: {
+                id: 'role2',
+                shortName: 'Участник 2: Тех. координатор',
+                badgeBg: 'bg-sky-500',
+                pillBg: 'bg-sky-50 text-sky-800 border-sky-200',
+                bannerBg: 'bg-sky-500',
+                avatar: 'ТК'
+            },
+            role3: {
+                id: 'role3',
+                shortName: 'Участник 3: Аналитик / Орг.',
+                badgeBg: 'bg-amber-500',
+                pillBg: 'bg-amber-50 text-amber-800 border-amber-200',
+                bannerBg: 'bg-amber-500',
+                avatar: 'АО'
+            }
+        };
+
+        const WEEKS = {
+            1: { label: 'Неделя 1: Подготовка', dates: '16 окт – 22 окт', due: '22 окт' },
+            2: { label: 'Неделя 2: Контент и запуск', dates: '23 окт – 29 окт', due: '29 окт' },
+            3: { label: 'Неделя 3: Онбординг', dates: '30 окт – 5 ноя', due: '5 ноя' },
+            4: { label: 'Неделя 4: Апробация (Этап 1)', dates: '6 ноя – 12 ноя', due: '12 ноя' },
+            5: { label: 'Неделя 5: Апробация (Этап 2)', dates: '13 ноя – 19 ноя', due: '19 ноя' },
+            6: { label: 'Неделя 6: Закрепление', dates: '20 ноя – 26 ноя', due: '26 ноя' },
+            7: { label: 'Неделя 7: Анализ и итоги', dates: '27 ноя – 12 дек', due: '12 дек' }
+        };
+
+        // ==========================================
+        // 2. ИСХОДНЫЙ НАБОР ИЗ 21 КАРТОЧКИ (7 НЕДЕЛЬ × 3 УЧАСТНИКА)
+        // ==========================================
+        function getInitialCards() {
+            return [
+                // --- НЕДЕЛЯ 1 (16 окт – 22 окт) ---
+                {
+                    id: 'w1-r1',
+                    column: 'backlog',
+                    week: 1,
+                    role: 'role1',
+                    title: 'Выбрать раздел программы 9 класса и составить календарный план',
+                    description: 'Определить ключевые темы по ГОСО РК для 9 класса («Электролитическая диссоциация», «Реакции ионного обмена», «ОВР») и расписать поурочный план внедрения платформы EasyMate.',
+                    dueDate: '22 окт',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Сверить темы с типовой учебной программой 9 класса (ГОСО РК)', done: false },
+                        { text: 'Выбрать темы «Электролитическая диссоциация» и «ОВР»', done: false },
+                        { text: 'Утвердить календарно-тематический план на 7 недель', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w1-r2',
+                    column: 'backlog',
+                    week: 1,
+                    role: 'role2',
+                    title: 'Изучить функционал EasyMate (Creation и Solver), создать виртуальные классы',
+                    description: 'Протестировать конструктор заданий EasyMate Creation и пошаговый решатель Solver. Создать учетные записи для учителя и виртуальные группы для 9-х классов.',
+                    dueDate: '22 окт',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Изучить синтаксис ввода химических формул и индексов в EasyMate', done: false },
+                        { text: 'Протестировать модули Creation и Solver на тестовых примерах', done: false },
+                        { text: 'Создать виртуальные классы 9 «А» и 9 «Б»', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w1-r3',
+                    column: 'backlog',
+                    week: 1,
+                    role: 'role3',
+                    title: 'Разработать входной диагностический тест (пре-тест) и анкету мотивации',
+                    description: 'Подготовить контрольно-измерительные материалы для замера стартового уровня знаний по химии и анкету отношения учеников к цифровым образовательным платформам.',
+                    dueDate: '22 окт',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Составить 15 тестовых заданий для входного среза знаний', done: false },
+                        { text: 'Разработать анкету оценки учебной мотивации (10 вопросов)', done: false },
+                        { text: 'Подготовить Google Форму / бланки для сбора ответов', done: false }
+                    ],
+                    comments: []
+                },
+
+                // --- НЕДЕЛЯ 2 (23 окт – 29 окт) ---
+                {
+                    id: 'w2-r1',
+                    column: 'backlog',
+                    week: 2,
+                    role: 'role1',
+                    title: 'Разработать банк интерактивных задач и уравнений реакций (30–40 заданий)',
+                    description: 'Сформировать базу разноуровневых заданий для 9 класса: базовый, средний и повышенный уровни сложности с эталонными решениями.',
+                    dueDate: '29 окт',
+                    dueDone: false,
+                    checklist: [
+                        { text: '1. Задачи на электролитическую диссоциацию (15 заданий)', done: false },
+                        { text: '2. Молекулярные и ионные уравнения реакций (15 заданий)', done: false },
+                        { text: '3. Расчетные задачи по уравнениям реакций (10 заданий)', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w2-r2',
+                    column: 'backlog',
+                    week: 2,
+                    role: 'role2',
+                    title: 'Загрузить учебные материалы в EasyMate Creation, настроить автопроверку и подсказки',
+                    description: 'Перенести разработанный методистом банк задач на платформу, настроить пошаговые подсказки при ошибках в коэффициентах и зарядах ионов.',
+                    dueDate: '29 окт',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Загрузить 35+ заданий в модуль EasyMate Creation', done: false },
+                        { text: 'Настроить пошаговые подсказки для типичных ошибок', done: false },
+                        { text: 'Проверить корректность автоматического оценивания', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w2-r3',
+                    column: 'backlog',
+                    week: 2,
+                    role: 'role3',
+                    title: 'Провести входное тестирование и анкетирование в 9-х классах',
+                    description: 'Провести пре-тест и входное анкетирование среди девятиклассников, оцифровать результаты и зафиксировать стартовые показатели успеваемости.',
+                    dueDate: '29 окт',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Провести входной срез знаний (40 минут)', done: false },
+                        { text: 'Собрать заполненные анкеты мотивации учащихся', done: false },
+                        { text: 'Свести стартовые баллы в сводную таблицу Excel', done: false }
+                    ],
+                    comments: []
+                },
+
+                // --- НЕДЕЛЯ 3 (30 окт – 5 ноя) ---
+                {
+                    id: 'w3-r1',
+                    column: 'backlog',
+                    week: 3,
+                    role: 'role1',
+                    title: 'Подготовить методическую памятку для учеников по работе в EasyMate Solver',
+                    description: 'Создать наглядную инструкцию с примерами, объясняющую, как использовать пошаговый разбор в EasyMate Solver для понимания логики решения, а не слепого списывания.',
+                    dueDate: '5 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Описать алгоритм самопроверки с помощью подсказок Solver', done: false },
+                        { text: 'Добавить скриншоты правильного ввода зарядов и индексов', done: false },
+                        { text: 'Оформить памятку в PDF для рассылки в чат класса', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w3-r2',
+                    column: 'backlog',
+                    week: 3,
+                    role: 'role2',
+                    title: 'Провести вводный инструктаж для 9 класса (выдать логины, решить проблемы с доступом)',
+                    description: 'Организовать ознакомительную сессию с учениками: раздать учетные данные, показать интерфейс со смартфона и ПК, устранить проблемы со входом.',
+                    dueDate: '5 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Раздать индивидуальные логины и пароли ученикам', done: false },
+                        { text: 'Провести 15-минутный демо-урок по интерфейсу EasyMate', done: false },
+                        { text: 'Убедиться, что 100% учеников экспериментальной группы вошли в систему', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w3-r3',
+                    column: 'backlog',
+                    week: 3,
+                    role: 'role3',
+                    title: 'Сформировать контрольную и экспериментальную группы, оформить протокол',
+                    description: 'Разделить учащихся на две равнозначные по стартовому уровню группы: контрольную (традиционное обучение) и экспериментальную (с применением EasyMate).',
+                    dueDate: '5 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Сравнить средний стартовый балл двух 9-х классов', done: false },
+                        { text: 'Закрепить состав экспериментальной и контрольной групп', done: false },
+                        { text: 'Оформить официальный протокол начала эксперимента', done: false }
+                    ],
+                    comments: []
+                },
+
+                // --- НЕДЕЛЯ 4 (6 ноя – 12 ноя) ---
+                {
+                    id: 'w4-r1',
+                    column: 'backlog',
+                    week: 4,
+                    role: 'role1',
+                    title: 'Провести первые уроки и выдать ДЗ на платформе по теме «Теория электролитической диссоциации»',
+                    description: 'Использовать EasyMate на этапе закрепления нового материала на уроке и назначить первое интерактивное домашнее задание по диссоциации кислот, щелочей и солей.',
+                    dueDate: '12 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Провести 2 урока с интерактивной практикой в EasyMate', done: false },
+                        { text: 'Назначить домашний тренажер по диссоциации электролитов', done: false },
+                        { text: 'Разобрать в классе задания, вызвавшие наибольшие затруднения', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w4-r2',
+                    column: 'backlog',
+                    week: 4,
+                    role: 'role2',
+                    title: 'Мониторить активность учеников на платформе, фиксировать сбои и ошибки ввода формул',
+                    description: 'Отслеживать статистику входов и выполнения заданий в реальном времени, вести журнал технических инцидентов и синтаксических ошибок учеников.',
+                    dueDate: '12 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Проверить процент выполнения первого ДЗ в панели учителя', done: false },
+                        { text: 'Зафиксировать частые ошибки ввода (регистр букв, скобки, заряды)', done: false },
+                        { text: 'Оперативно помочь ученикам с техническими вопросами', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w4-r3',
+                    column: 'backlog',
+                    week: 4,
+                    role: 'role3',
+                    title: 'Провести промежуточный мини-срез знаний и собрать обратную связь от учеников',
+                    description: 'Провести 10-минутное формативное оценивание по теме ТЭД и экспресс-опрос о том, насколько понятны подсказки на платформе.',
+                    dueDate: '12 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Провести формативный мини-тест в обеих группах', done: false },
+                        { text: 'Провести быстрый опрос (3 вопроса) об удобстве интерфейса', done: false },
+                        { text: 'Зафиксировать первые динамические изменения в таблице', done: false }
+                    ],
+                    comments: []
+                },
+
+                // --- НЕДЕЛЯ 5 (13 ноя – 19 ноя) ---
+                {
+                    id: 'w5-r1',
+                    column: 'backlog',
+                    week: 5,
+                    role: 'role1',
+                    title: 'Скорректировать сложность заданий по итогам 4-й недели, добавить тему «Реакции ионного обмена»',
+                    description: 'Адаптировать формулировки задач с учетом выявленных ошибок и открыть новый блок интерактивных заданий на составление полных и сокращенных ионных уравнений.',
+                    dueDate: '19 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Уточнить формулировки в 5 сложных задачах прошлой недели', done: false },
+                        { text: 'Добавить 20 заданий по теме «Реакции ионного обмена (РИО)»', done: false },
+                        { text: 'Настроить тренировку с использованием таблицы растворимости', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w5-r2',
+                    column: 'backlog',
+                    week: 5,
+                    role: 'role2',
+                    title: 'Настроить рейтинг прогресса и выгрузить промежуточную аналитику по времени решения',
+                    description: 'Включить элементы геймификации (баллы и прогресс-трекеры) для повышения вовлеченности, выгрузить статистику среднего времени решения одной задачи.',
+                    dueDate: '19 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Активировать отображение баллов и прогресса выполнения', done: false },
+                        { text: 'Выгрузить логи времени затраченного на решение задач', done: false },
+                        { text: 'Передать аналитику участнику №3 для обработки', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w5-r3',
+                    column: 'backlog',
+                    week: 5,
+                    role: 'role3',
+                    title: 'Провести наблюдение за вовлеченностью на уроке и интервью с учителем-предметником',
+                    description: 'Посетить урок химии с применением EasyMate, заполнить карту наблюдения активности учащихся и взять структурированное интервью у учителя.',
+                    dueDate: '19 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Заполнить чек-лист вовлеченности учеников на уроке', done: false },
+                        { text: 'Провести интервью с учителем химии (плюсы/минусы подготовки)', done: false },
+                        { text: 'Систематизировать качественные наблюдения для отчета', done: false }
+                    ],
+                    comments: []
+                },
+
+                // --- НЕДЕЛЯ 6 (20 ноя – 26 ноя) ---
+                {
+                    id: 'w6-r1',
+                    column: 'backlog',
+                    week: 6,
+                    role: 'role1',
+                    title: 'Подготовить итоговый контрольный блок заданий в EasyMate для подготовки к СОР',
+                    description: 'Собрать комплексный тренировочный вариант в формате суммативного оценивания за раздел (СОР), объединяющий ТЭД, ионные уравнения и расчетные задачи.',
+                    dueDate: '26 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Составить 2 варианта тренировочного СОР в EasyMate', done: false },
+                        { text: 'Включить задания на прогнозирование признаков реакций', done: false },
+                        { text: 'Провести предконтрольный разбор на уроке', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w6-r2',
+                    column: 'backlog',
+                    week: 6,
+                    role: 'role2',
+                    title: 'Провести финальную проверку корректности ответов и выгрузить все данные по классам',
+                    description: 'Выполнить полную выгрузку журнала успеваемости, количества попыток и процента решенных задач из EasyMate за весь период апробации.',
+                    dueDate: '26 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Проверить отсутствие спорных автопроверок в итоговом блоке', done: false },
+                        { text: 'Экспортировать полную статистику по всем ученикам в CSV/Excel', done: false },
+                        { text: 'Сделать резервную копию созданных учебных модулей', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w6-r3',
+                    column: 'backlog',
+                    week: 6,
+                    role: 'role3',
+                    title: 'Провести итоговое тестирование (пост-тест) и финальное анкетирование учеников',
+                    description: 'Провести итоговый срез знаний в контрольной и экспериментальной группах, а также финальный опрос об удовлетворенности работой с EasyMate.',
+                    dueDate: '26 ноя',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Провести пост-тест в контрольной и экспериментальной группах', done: false },
+                        { text: 'Собрать финальные анкеты оценки удобства платформы', done: false },
+                        { text: 'Свести итоговые баллы (пре-тест vs пост-тест)', done: false }
+                    ],
+                    comments: []
+                },
+
+                // --- НЕДЕЛЯ 7 (27 ноя – 12 дек) ---
+                {
+                    id: 'w7-r1',
+                    column: 'backlog',
+                    week: 7,
+                    role: 'role1',
+                    title: 'Описать педагогические выводы: влияние EasyMate на понимание уравнений и расчетов',
+                    description: 'Сформулировать методические выводы об эффективности платформы при изучении химии в 9 классе, описать снижение типичных ошибок в ионных уравнениях.',
+                    dueDate: '12 дек',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Проанализировать качество усвоения тем ТЭД и РИО', done: false },
+                        { text: 'Сформулировать методические рекомендации для учителей химии', done: false },
+                        { text: 'Передать педагогический раздел в общий отчет', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w7-r2',
+                    column: 'backlog',
+                    week: 7,
+                    role: 'role2',
+                    title: 'Подготовить техническое руководство и план масштабирования на 8, 10–11 классы',
+                    description: 'Оформить пошаговый гайд по развертыванию EasyMate в школе и составить дорожную карту внедрения платформы в других параллелях.',
+                    dueDate: '12 дек',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Написать инструкцию быстрого старта для новых педагогов', done: false },
+                        { text: 'Описать системные требования и лайфхаки работы с платформой', done: false },
+                        { text: 'Подготовить предложения по масштабированию на 8 и 10–11 классы', done: false }
+                    ],
+                    comments: []
+                },
+                {
+                    id: 'w7-r3',
+                    column: 'backlog',
+                    week: 7,
+                    role: 'role3',
+                    title: 'Сравнить результаты пре- и пост-тестов в графиках, собрать отчет и презентацию защиты',
+                    description: 'Провести статистический анализ прироста знаний в экспериментальной и контрольной группах, построить диаграммы и оформить финальную презентацию проекта.',
+                    dueDate: '12 дек',
+                    dueDone: false,
+                    checklist: [
+                        { text: 'Рассчитать средний балл и качество знаний (пре-тест vs пост-тест)', done: false },
+                        { text: 'Построить наглядные диаграммы для защиты проекта', done: false },
+                        { text: 'Собрать итоговый отчет и презентацию (12–15 слайдов)', done: false }
+                    ],
+                    comments: []
+                }
+            ];
+        }
+
+        // ==========================================
+        // 3. СОСТОЯНИЕ ПРИЛОЖЕНИЯ И LOCALSTORAGE
+        // ==========================================
+        const STORAGE_KEY = 'easymate_trello_board_v1';
+        let cards = [];
+        let activeCardId = null;
+        let draggedCardId = null;
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        cards = parsed;
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Не удалось прочитать localStorage:', e);
+            }
+            cards = getInitialCards();
+            saveState();
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+            } catch (e) {
+                console.warn('Не удалось сохранить в localStorage:', e);
+            }
+            updateGlobalProgress();
+        }
+
+        // ==========================================
+        // 4. РЕНДЕРИНГ ДОСКИ И КАРТОЧЕК
+        // ==========================================
+        function renderBoard() {
+            const board = document.getElementById('board-container');
+            const searchQuery = document.getElementById('search-input').value.trim().toLowerCase();
+            const roleFilter = document.getElementById('filter-role').value;
+            const weekFilter = document.getElementById('filter-week').value;
+
+            board.innerHTML = '';
+
+            COLUMNS.forEach(col => {
+                // Фильтрация карточек текущей колонки
+                const colCards = cards.filter(c => {
+                    if (c.column !== col.id) return false;
+                    if (roleFilter !== 'all' && c.role !== roleFilter) return false;
+                    if (weekFilter !== 'all' && String(c.week) !== weekFilter) return false;
+                    if (searchQuery) {
+                        const inTitle = c.title.toLowerCase().includes(searchQuery);
+                        const inDesc = (c.description || '').toLowerCase().includes(searchQuery);
+                        if (!inTitle && !inDesc) return false;
+                    }
+                    return true;
+                });
+
+                // Проверка WIP-лимита (для колонки "В работе")
+                const totalInColUnfiltered = cards.filter(c => c.column === col.id).length;
+                const isWipExceeded = col.wipLimit && totalInColUnfiltered > col.wipLimit;
+
+                // Создание контейнера колонки
+                const colEl = document.createElement('section');
+                colEl.className = `w-[300px] sm:w-[320px] shrink-0 max-h-full flex flex-col rounded-2xl shadow-lg border transition-colors ${
+                    isWipExceeded 
+                        ? 'bg-rose-50/95 border-rose-400' 
+                        : 'bg-[#ebecf0]/95 backdrop-blur-xs border-white/40'
+                }`;
+
+                // Шапка колонки
+                const headerHtml = `
+                    <div class="p-3 pb-2 flex items-center justify-between gap-2 shrink-0">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <h2 class="font-bold text-sm text-slate-800 truncate" title="${col.title}">
+                                ${col.title}
+                            </h2>
+                            <span class="text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                                isWipExceeded ? 'bg-rose-600 text-white' : col.badgeColor
+                            }">
+                                ${colCards.length}${col.wipLimit ? ` / ${col.wipLimit}` : ''}
+                            </span>
+                        </div>
+                        <button 
+                            onclick="openAddCardModal('${col.id}')" 
+                            class="p-1 rounded-lg hover:bg-slate-300/60 text-slate-600 transition cursor-pointer shrink-0"
+                            title="Добавить карточку в эту колонку"
+                        >
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    ${isWipExceeded ? `
+                        <div class="mx-3 mb-2 px-2.5 py-1 bg-rose-100 border border-rose-300 rounded-lg text-[11px] font-medium text-rose-800 flex items-center gap-1.5">
+                            <i data-lucide="alert-circle" class="w-3.5 h-3.5 shrink-0"></i>
+                            <span>Превышен WIP-лимит (макс. 2 задачи на человека)!</span>
+                        </div>
+                    ` : ''}
+                `;
+
+                // Зона карточек (Dropzone)
+                const listEl = document.createElement('div');
+                listEl.className = 'flex-1 overflow-y-auto column-scroll px-2.5 py-1 space-y-2.5 min-h-[120px] column-dropzone rounded-xl transition-all';
+                listEl.dataset.columnId = col.id;
+
+                // События Drag-and-Drop на колонку
+                listEl.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    listEl.classList.add('drag-over');
+                });
+                listEl.addEventListener('dragleave', () => {
+                    listEl.classList.remove('drag-over');
+                });
+                listEl.addEventListener('drop', e => {
+                    e.preventDefault();
+                    listEl.classList.remove('drag-over');
+                    if (draggedCardId) {
+                        moveCardToColumn(draggedCardId, col.id);
+                    }
+                });
+
+                if (colCards.length === 0) {
+                    listEl.innerHTML = `
+                        <div class="h-24 border-2 border-dashed border-slate-300/80 rounded-xl flex flex-col items-center justify-center text-slate-400 text-xs p-3 text-center">
+                            <span>Нет задач</span>
+                            <span class="text-[11px] opacity-75 mt-0.5">Перетащите карточку сюда</span>
+                        </div>
+                    `;
+                } else {
+                    colCards.forEach(card => {
+                        listEl.appendChild(createCardElement(card));
+                    });
+                }
+
+                // Кнопка внизу колонки «+ Добавить карточку»
+                const footerHtml = `
+                    <div class="p-2.5 pt-1.5 shrink-0">
+                        <button 
+                            onclick="openAddCardModal('${col.id}')" 
+                            class="w-full py-1.5 px-2.5 rounded-xl text-left text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-300/60 flex items-center gap-1.5 transition cursor-pointer"
+                        >
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            <span>Добавить карточку</span>
+                        </button>
+                    </div>
+                `;
+
+                colEl.innerHTML = headerHtml;
+                colEl.appendChild(listEl);
+                colEl.insertAdjacentHTML('beforeend', footerHtml);
+                board.appendChild(colEl);
+            });
+
+            lucide.createIcons();
+            updateGlobalProgress();
+        }
+
+        function createCardElement(card) {
+            const role = ROLES[card.role] || ROLES.role1;
+            const weekInfo = WEEKS[card.week] || WEEKS[1];
+
+            // Расчет прогресса чек-листа
+            const totalChecks = card.checklist ? card.checklist.length : 0;
+            const doneChecks = card.checklist ? card.checklist.filter(item => item.done).length : 0;
+            const allChecksDone = totalChecks > 0 && doneChecks === totalChecks;
+            const isCardDone = card.column === 'done' || card.dueDone;
+
+            const cardEl = document.createElement('article');
+            cardEl.className = 'task-card bg-white rounded-xl p-3 shadow-xs border border-slate-200/90 cursor-pointer relative group';
+            cardEl.draggable = true;
+            cardEl.dataset.cardId = card.id;
+
+            // Drag события карточки
+            cardEl.addEventListener('dragstart', e => {
+                draggedCardId = card.id;
+                cardEl.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            cardEl.addEventListener('dragend', () => {
+                draggedCardId = null;
+                cardEl.classList.remove('dragging');
+                document.querySelectorAll('.column-dropzone').forEach(z => z.classList.remove('drag-over'));
+            });
+
+            // Клик открывает модальное окно редактирования
+            cardEl.addEventListener('click', () => openCardModal(card.id));
+
+            cardEl.innerHTML = `
+                <!-- Верхняя строка: метка роли и бейдж недели -->
+                <div class="flex items-center justify-between gap-1.5 mb-2 flex-wrap">
+                    <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${role.pillBg}">
+                        <span class="w-2 h-2 rounded-full ${role.badgeBg}"></span>
+                        ${role.shortName.replace('Участник ', 'Уч. ')}
+                    </span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        Нед. ${card.week}
+                    </span>
+                </div>
+
+                <!-- Название карточки -->
+                <h3 class="text-[13px] font-semibold text-slate-800 leading-snug mb-2 group-hover:text-blue-700 transition-colors">
+                    ${escapeHtml(card.title)}
+                </h3>
+
+                <!-- Подзаголовок этапа недели -->
+                <div class="text-[11px] text-slate-400 mb-2.5 flex items-center gap-1">
+                    <i data-lucide="layers" class="w-3 h-3"></i>
+                    <span>${weekInfo.label.replace(/^Неделя \d+:\s*/, '')} (${weekInfo.dates})</span>
+                </div>
+
+                <!-- Нижняя панель бейджей: Дедлайн, Чек-лист, Комментарии, Аватар -->
+                <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <!-- Дедлайн -->
+                        <span class="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md ${
+                            isCardDone 
+                                ? 'bg-emerald-100 text-emerald-800' 
+                                : 'bg-slate-100 text-slate-600'
+                        }" title="Срок выполнения">
+                            <i data-lucide="${isCardDone ? 'check-circle-2' : 'clock'}" class="w-3 h-3"></i>
+                            <span>${escapeHtml(card.dueDate)}</span>
+                        </span>
+
+                        <!-- Прогресс чек-листа -->
+                        ${totalChecks > 0 ? `
+                            <span class="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-md ${
+                                allChecksDone 
+                                    ? 'bg-emerald-100 text-emerald-800' 
+                                    : 'bg-slate-100 text-slate-600'
+                            }" title="Выполнено пунктов чек-листа">
+                                <i data-lucide="check-square" class="w-3 h-3"></i>
+                                <span>${doneChecks}/${totalChecks}</span>
+                            </span>
+                        ` : ''}
+
+                        <!-- Количество комментариев -->
+                        ${card.comments && card.comments.length > 0 ? `
+                            <span class="inline-flex items-center gap-1 text-[11px] text-slate-500 px-1 py-0.5" title="Комментарии">
+                                <i data-lucide="message-square" class="w-3 h-3"></i>
+                                <span>${card.comments.length}</span>
+                            </span>
+                        ` : ''}
+                    </div>
+
+                    <!-- Аватар исполнителя -->
+                    <div class="w-6 h-6 rounded-full ${role.badgeBg} text-white text-[10px] font-bold flex items-center justify-center shrink-0 shadow-2xs" title="${role.shortName}">
+                        ${role.avatar}
+                    </div>
+                </div>
+            `;
+
+            return cardEl;
+        }
+
+        // ==========================================
+        // 5. ПЕРЕМЕЩЕНИЕ КАРТОЧЕК И ПРОГРЕСС
+        // ==========================================
+        function moveCardToColumn(cardId, newColumnId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card || card.column === newColumnId) return;
+
+            card.column = newColumnId;
+            if (newColumnId === 'done') {
+                card.dueDone = true;
+            }
+            saveState();
+            renderBoard();
+
+            const colObj = COLUMNS.find(c => c.id === newColumnId);
+            showToast(`Перемещено в «${colObj ? colObj.title : newColumnId}»`);
+        }
+
+        function updateGlobalProgress() {
+            const total = cards.length;
+            const done = cards.filter(c => c.column === 'done').length;
+            const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+            document.getElementById('global-progress-bar').style.width = `${percent}%`;
+            document.getElementById('global-progress-text').textContent = `Выполнено: ${done} из ${total} (${percent}%)`;
+        }
+
+        // ==========================================
+        // 6. МОДАЛЬНОЕ ОКНО КАРТОЧКИ (РЕДАКТИРОВАНИЕ)
+        // ==========================================
+        function openCardModal(cardId) {
+            const card = cards.find(c => c.id === cardId);
+            if (!card) return;
+
+            activeCardId = cardId;
+            const role = ROLES[card.role] || ROLES.role1;
+            const weekInfo = WEEKS[card.week] || WEEKS[1];
+
+            document.getElementById('modal-banner').className = `h-3 w-full transition-colors ${role.bannerBg}`;
+            document.getElementById('modal-week-badge').textContent = `${weekInfo.label} (${weekInfo.dates})`;
+            document.getElementById('modal-column-select').value = card.column;
+            document.getElementById('modal-title-input').value = card.title;
+            document.getElementById('modal-role-select').value = card.role;
+            document.getElementById('modal-due-input').value = card.dueDate || '';
+            document.getElementById('modal-due-done').checked = Boolean(card.dueDone);
+            document.getElementById('modal-desc-input').value = card.description || '';
+
+            renderModalChecklist(card);
+            renderModalComments(card);
+
+            const modal = document.getElementById('card-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeCardModal() {
+            activeCardId = null;
+            const modal = document.getElementById('card-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function renderModalChecklist(card) {
+            const container = document.getElementById('modal-checklist-items');
+            container.innerHTML = '';
+
+            const items = card.checklist || [];
+            const total = items.length;
+            const done = items.filter(i => i.done).length;
+            const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+
+            document.getElementById('modal-checklist-percent').textContent = `${percent}%`;
+            document.getElementById('modal-checklist-bar').style.width = `${percent}%`;
+            document.getElementById('modal-checklist-bar').className = `h-full transition-all duration-300 ${
+                percent === 100 && total > 0 ? 'bg-emerald-500' : 'bg-blue-600'
+            }`;
+
+            items.forEach((item, index) => {
+                const row = document.createElement('div');
+                row.className = 'flex items-center justify-between gap-2 bg-slate-50 hover:bg-slate-100 px-3 py-2 rounded-lg border border-slate-200/70 transition';
+                row.innerHTML = `
+                    <label class="flex items-center gap-2.5 flex-1 cursor-pointer select-none">
+                        <input 
+                            type="checkbox" 
+                            ${item.done ? 'checked' : ''} 
+                            onchange="toggleChecklistItem(${index})"
+                            class="w-4 h-4 rounded text-blue-600 focus:ring-0 cursor-pointer"
+                        >
+                        <span class="text-xs sm:text-sm ${item.done ? 'line-through text-slate-400' : 'text-slate-700'}">
+                            ${escapeHtml(item.text)}
+                        </span>
+                    </label>
+                    <button 
+                        onclick="removeChecklistItem(${index})" 
+                        class="text-slate-400 hover:text-rose-600 p-1 rounded transition cursor-pointer"
+                        title="Удалить пункт"
+                    >
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                    </button>
+                `;
+                container.appendChild(row);
+            });
+            lucide.createIcons();
+        }
+
+        function toggleChecklistItem(index) {
+            const card = cards.find(c => c.id === activeCardId);
+            if (!card || !card.checklist[index]) return;
+            card.checklist[index].done = !card.checklist[index].done;
+            saveState();
+            renderModalChecklist(card);
+            renderBoard();
+        }
+
+        function addChecklistItem() {
+            const input = document.getElementById('new-checklist-item-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const card = cards.find(c => c.id === activeCardId);
+            if (!card) return;
+
+            if (!card.checklist) card.checklist = [];
+            card.checklist.push({ text, done: false });
+            input.value = '';
+            saveState();
+            renderModalChecklist(card);
+            renderBoard();
+        }
+
+        function removeChecklistItem(index) {
+            const card = cards.find(c => c.id === activeCardId);
+            if (!card) return;
+            card.checklist.splice(index, 1);
+            saveState();
+            renderModalChecklist(card);
+            renderBoard();
+        }
+
+        function renderModalComments(card) {
+            const list = document.getElementById('modal-comments-list');
+            const comments = card.comments || [];
+
+            if (comments.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-400 italic">Комментариев пока нет. Оставьте заметку для команды.</p>`;
+                return;
+            }
+
+            list.innerHTML = comments.map(c => `
+                <div class="bg-white p-2.5 rounded-xl border border-slate-200 text-xs">
+                    <div class="flex items-center justify-between text-slate-400 text-[11px] mb-1">
+                        <span class="font-semibold text-slate-600">Участник команды</span>
+                        <span>${escapeHtml(c.time)}</span>
+                    </div>
+                    <p class="text-slate-700">${escapeHtml(c.text)}</p>
+                </div>
+            `).join('');
+        }
+
+        function addComment() {
+            const input = document.getElementById('new-comment-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const card = cards.find(c => c.id === activeCardId);
+            if (!card) return;
+
+            if (!card.comments) card.comments = [];
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) + ', сегодня';
+            card.comments.unshift({ text, time: timeStr });
+            input.value = '';
+            saveState();
+            renderModalComments(card);
+            renderBoard();
+        }
+
+        function saveCardChanges() {
+            const card = cards.find(c => c.id === activeCardId);
+            if (!card) return;
+
+            const newTitle = document.getElementById('modal-title-input').value.trim();
+            if (newTitle) card.title = newTitle;
+
+            card.column = document.getElementById('modal-column-select').value;
+            card.role = document.getElementById('modal-role-select').value;
+            card.dueDate = document.getElementById('modal-due-input').value.trim() || 'Без срока';
+            card.dueDone = document.getElementById('modal-due-done').checked;
+            card.description = document.getElementById('modal-desc-input').value.trim();
+
+            saveState();
+            renderBoard();
+            closeCardModal();
+            showToast('Карточка обновлена');
+        }
+
+        function deleteCurrentCard() {
+            if (!activeCardId) return;
+            cards = cards.filter(c => c.id !== activeCardId);
+            saveState();
+            renderBoard();
+            closeCardModal();
+            showToast('Карточка удалена');
+        }
+
+        // ==========================================
+        // 7. ДОБАВЛЕНИЕ НОВОЙ КАРТОЧКИ
+        // ==========================================
+        function openAddCardModal(defaultColumn = 'backlog') {
+            document.getElementById('new-card-title').value = '';
+            document.getElementById('new-card-desc').value = '';
+            document.getElementById('new-card-column').value = defaultColumn;
+            document.getElementById('new-card-week').value = '1';
+            document.getElementById('new-card-due').value = WEEKS[1].due;
+
+            const modal = document.getElementById('add-card-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => document.getElementById('new-card-title').focus(), 50);
+        }
+
+        function closeAddCardModal() {
+            const modal = document.getElementById('add-card-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Автоподстановка дедлайна при смене недели в окне создания карточки
+        document.getElementById('new-card-week').addEventListener('change', e => {
+            const weekNum = Number(e.target.value);
+            if (WEEKS[weekNum]) {
+                document.getElementById('new-card-due').value = WEEKS[weekNum].due;
+            }
+        });
+
+        function createNewCard() {
+            const title = document.getElementById('new-card-title').value.trim();
+            if (!title) {
+                showToast('Введите название задачи');
+                return;
+            }
+
+            const newCard = {
+                id: 'custom-' + Date.now(),
+                column: document.getElementById('new-card-column').value,
+                week: Number(document.getElementById('new-card-week').value),
+                role: document.getElementById('new-card-role').value,
+                title,
+                description: document.getElementById('new-card-desc').value.trim(),
+                dueDate: document.getElementById('new-card-due').value.trim() || '12 дек',
+                dueDone: false,
+                checklist: [],
+                comments: []
+            };
+
+            cards.push(newCard);
+            saveState();
+            renderBoard();
+            closeAddCardModal();
+            showToast('Новая карточка добавлена');
+        }
+
+        // ==========================================
+        // 8. ФИЛЬТРЫ, СПРАВКА И СБРОС ДОСКИ
+        // ==========================================
+        function quickFilterRole(roleId) {
+            const select = document.getElementById('filter-role');
+            select.value = select.value === roleId ? 'all' : roleId;
+            renderBoard();
+        }
+
+        function openHelpModal() {
+            const modal = document.getElementById('help-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeHelpModal() {
+            const modal = document.getElementById('help-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openResetModal() {
+            const modal = document.getElementById('reset-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            lucide.createIcons();
+        }
+
+        function closeResetModal() {
+            const modal = document.getElementById('reset-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function confirmResetBoard() {
+            cards = getInitialCards();
+            saveState();
+            document.getElementById('search-input').value = '';
+            document.getElementById('filter-role').value = 'all';
+            document.getElementById('filter-week').value = 'all';
+            renderBoard();
+            closeResetModal();
+            showToast('Доска сброшена к исходному плану на 7 недель');
+        }
+
+        // ==========================================
+        // 9. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        // ==========================================
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        let toastTimer = null;
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2600);
+        }
+
+        // Слушатели фильтров и клавиши Escape
+        document.getElementById('search-input').addEventListener('input', renderBoard);
+        document.getElementById('filter-role').addEventListener('change', renderBoard);
+        document.getElementById('filter-week').addEventListener('change', renderBoard);
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeCardModal();
+                closeAddCardModal();
+                closeHelpModal();
+                closeResetModal();
+            }
+        });
+
+        // Инициализация при загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            renderBoard();
+        });
+    </script>
+</body>
+</html>
